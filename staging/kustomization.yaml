@@ -2,6 +2,11 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
 - ../base
+- rollout.yaml
+spec:
+  containers:
+  - image: schoolofdevops/vote:v4
+  name: vote
 namespace: staging
 commonAnnotations:
   supported-by: sre@example.com
