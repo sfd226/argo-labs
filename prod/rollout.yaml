@@ -1,0 +1,30 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: vote
+spec:
+  replicas: 5
+  strategy:
+    blueGreen: null
+    canary:
+      canaryService: vote-preview
+      stableService: vote
+      trafficRouting:
+        nginx:
+          stableIngress: vote
+      steps:
+      - setCanaryScale:
+          replicas: 3
+      - setWeight: 20
+      - pause:
+          duration: 10s
+      - setWeight: 40
+      - pause:
+          duration: 10s
+      - setWeight: 60
+      - pause:
+          duration: 10s
+      - setWeight: 80
+      - pause:
+          duration: 10s
+      - setWeight: 100
