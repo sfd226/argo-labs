@@ -1,0 +1,11 @@
+metadata:
+  annotations:
+    argocd-image-updater.argoproj.io/git-branch: main
+    argocd-image-updater.argoproj.io/image-list: myimage=frederiquer/vote
+    argocd-image-updater.argoproj.io/myimage.allow-tags: regexp:^[0-9a-f]{7}$
+    argocd-image-updater.argoproj.io/myimage.ignore-tags: latest, dev
+    argocd-image-updater.argoproj.io/myimage.update-strategy: latest
+    argocd-image-updater.argoproj.io/myimage.kustomize.image-name: schoolofdevops/vote
+    argocd-image-updater.argoproj.io/myimage.force-update: "true"
+    argocd-image-updater.argoproj.io/write-back-method: git:secret:argocd/git-creds
+    argocd-image-updater.argoproj.io/write-back-target: "kustomization:../base"

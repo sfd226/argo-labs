@@ -1,0 +1,18 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: vote-staging
+  namespace: argocd
+spec:
+  destination:
+    namespace: staging
+    server: https://kubernetes.default.svc
+  project: instavote
+  source:
+    path: staging
+    repoURL: https://github.com/FrederiqueRetsema/argo-labs.git
+    targetRevision: main # <-- should be staging, or whatever - not main/master. Following Udemy.
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

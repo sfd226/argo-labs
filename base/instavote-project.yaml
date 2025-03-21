@@ -1,0 +1,17 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: instavote
+  namespace: argocd
+spec:
+  description: instavote project for Udemy demo
+  sourceRepos:
+  - 'https://github.com/FrederiqueRetsema/argo-labs'
+
+  destinations:
+  - namespace: "staging"
+    server: https://kubernetes.default.svc
+    name: in-cluster
+  - namespace: "prod"
+    server: https://kubernetes.default.svc
+    name: in-cluster

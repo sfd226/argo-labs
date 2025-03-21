@@ -1,0 +1,93 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: github-polling-job
+  namespace: argo-events
+spec:
+  schedule: "* * * * *"  # Poll every minute
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: poller
+            image: schoolofdevops/github-poller:latest  
+            env:
+            - name: GITHUB_API_URL
+              value: "https://api.github.com/repos/FrederiqueRetsema/argo-labs/commits"
+            - name: GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: github-token-secret
+                  key: token
+            - name: LAST_COMMIT_FILE
+              value: "/data/last_commit.txt"
+            - name: ARGO_EVENT_SOURCE_URL
+              value: "http://webhook-eventsource-svc.argo-events.svc.cluster.local:12000/github"
+            volumeMounts:
+            - name: commit-storage
+              mountPath: /data
+          restartPolicy: OnFailure
+          volumes:
+            - name: commit-storage
+              persistentVolumeClaim:
+                claimName: poller-pvc  # Use a PVC to persist the last commit file
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: poller-pvc
+  namespace: argo-events
+spec:
+  storageClassName: argo-poller
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Mi
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: argo-pv
+spec:
+  storageClassName: argo-poller
+  capacity:
+    storage: 100Gi
+  volumeMode: Filesystem
+  accessModes:
+  - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Delete
+  local:
+    path: /mnt
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: kubernetes.io/hostname
+          operator: In
+          values:
+            - worker2
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: argo-workflows-pv
+spec:
+  storageClassName: argo-workflows-pv
+  capacity:
+    storage: 100Gi
+  volumeMode: Filesystem
+  accessModes:
+  - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Delete
+  local:
+    path: /mnt
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: kubernetes.io/hostname
+          operator: In
+          values:
+            - worker2

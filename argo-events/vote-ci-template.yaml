@@ -1,0 +1,145 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: vote-ci-template
+  namespace: argo-events
+spec:
+  entrypoint: main
+  serviceAccountName: default
+  arguments:
+    parameters:
+    - name: repo-url
+      value: "https://github.com/your-username/your-flask-app.git"
+    - name: branch
+      value: "main"
+    - name: image
+      value: "your-registry/your-flask-app"
+    - name: dockerfile
+      value: "Dockerfile"
+
+  volumeClaimTemplates:
+  - metadata:
+      name: workspace
+    spec:
+      storageClassName: argo-workflows-pv
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: 100Mi
+
+  volumes:
+  - name: docker-config
+    secret:
+      secretName: docker-registry-creds
+      items:
+        - key: .dockerconfigjson
+          path: config.json
+
+  templates:
+  - name: main
+    inputs:
+      parameters:
+      - name: repo-url
+      - name: branch
+      - name: image
+      - name: dockerfile
+    steps:
+    - - name: clone
+        template: clone
+        arguments:
+          parameters:
+          - name: repo-url
+            value: "{{inputs.parameters.repo-url}}"
+          - name: branch
+            value: "{{inputs.parameters.branch}}"
+    - - name: build
+        template: build
+    - - name: test
+        template: test
+    - - name: imagebuild
+        template: imagebuild
+        arguments:
+          parameters:
+          - name: commit-sha
+            value: "{{steps.clone.outputs.parameters.commit-sha}}"
+          - name: image
+            value: "{{inputs.parameters.image}}"
+          - name: dockerfile
+            value: "{{inputs.parameters.dockerfile}}"
+
+  # Clone task
+  - name: clone
+    inputs:
+      parameters:
+      - name: repo-url
+      - name: branch
+    script:
+      image: alpine/git
+      command: [sh]
+      source: |
+        #!/bin/sh
+        rm -fr /workspace/.git
+        rm -fr /workspace/*
+        git clone --branch {{inputs.parameters.branch}} {{inputs.parameters.repo-url}} /workspace
+        cd /workspace
+        COMMIT_SHA=$(git rev-parse --short HEAD)
+        echo $COMMIT_SHA > /workspace/commit-sha.txt
+      volumeMounts:
+      - name: workspace
+        mountPath: /workspace
+    outputs:
+      parameters:
+      - name: commit-sha
+        valueFrom:
+          path: /workspace/commit-sha.txt
+
+  # Build task
+  - name: build
+    script:
+      image: python:3.9
+      command: ["sh"]
+      source: |
+        #!/bin/sh
+        cd /workspace/src
+        pip install -r requirements.txt
+      volumeMounts:
+      - name: workspace
+        mountPath: /workspace
+
+  # Test task
+  - name: test
+    script:
+      image: python:3.9
+      command: ["sh"]
+      source: |
+        #!/bin/sh
+        cd /workspace
+        pip install nose
+        nosetests
+      volumeMounts:
+      - name: workspace
+        mountPath: /workspace
+
+  # Image build and publish task using Kaniko
+  - name: imagebuild
+    inputs:
+      parameters:
+      - name: commit-sha
+      - name: image
+      - name: dockerfile
+    container:
+      image: gcr.io/kaniko-project/executor:latest
+      command: ["/kaniko/executor"]
+      args:
+      - --dockerfile=/workspace/src/{{inputs.parameters.dockerfile}}
+      - --context=/workspace/src
+      - --destination={{inputs.parameters.image}}:{{inputs.parameters.commit-sha}}
+      - --force
+      volumeMounts:
+      - name: workspace
+        mountPath: /workspace
+      - name: docker-config
+        mountPath: /kaniko/.docker
+      env:
+      - name: DOCKER_CONFIG
+        value: /kaniko/.docker

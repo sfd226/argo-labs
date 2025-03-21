@@ -1,0 +1,137 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: build-workflow-prod-
+  namespace: argo
+spec:
+  entrypoint: main
+  arguments:
+    parameters:
+    - name: repo-url
+      value: https://github.com/FrederiqueRetsema/argo-labs
+    - name: branch
+      value: release         # <-- should be main/master for prod, but following Udemy training
+    - name: image
+      value: frederiquer/vote
+    - name: dockerfile
+      value: Dockerfile
+  volumeClaimTemplates:
+  - metadata:
+      name: build-volume
+    spec:
+      storageClassName: local
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: 100Mi
+  volumes:
+  - name: docker-config
+    secret:
+      secretName: docker-registry-creds
+      items:
+      - key: .dockerconfigjson
+        path: config.json
+  templates:
+  - name: main
+    inputs:
+      parameters:
+      - name: repo-url
+      - name: branch
+      - name: image
+      - name: dockerfile
+    dag:
+      tasks:
+      - name: clone
+        template: task-clone
+        arguments:
+          parameters: [{name: repo-url, value: "{{inputs.parameters.repo-url}}" },
+                       {name: branch, value: "{{inputs.parameters.branch}}" }]
+      - name: build
+        template: task-build
+        dependencies: [clone]
+      - name: test
+        template: task-test
+        dependencies: [build]
+      - name: imagebuild
+        template: task-imagebuild
+        arguments:
+          parameters:
+          - name: commit-sha
+            value: "{{tasks.clone.outputs.parameters.commit-sha}}"
+          - name: image
+            value: "{{inputs.parameters.image}}"
+          - name: dockerfile
+            value: "{{inputs.parameters.dockerfile}}"
+        dependencies: [test]
+  - name: task-clone
+    inputs:
+      parameters:
+      - name: repo-url
+      - name: branch
+    script:
+      image: alpine/git:latest
+      command: ['sh', '-c']
+      source: |
+        #!/bin/sh
+        cd /clone
+        git clone --branch {{inputs.parameters.branch}} {{inputs.parameters.repo-url}} /clone
+        ls /clone
+        COMMIT_SHA=$(git rev-parse --short HEAD)
+        echo $COMMIT_SHA > /clone/commit-sha.txt
+      volumeMounts:
+      - name: build-volume
+        mountPath: /clone
+    outputs:
+      parameters:
+      - name: commit-sha
+        valueFrom: 
+          path: "/clone/commit-sha.txt"
+  - name: task-build
+    script:
+      image: python:alpine3.17
+      command: ['sh', '-c']
+      source: |
+        #!/bin/sh
+        cd /clone/src
+        pip install -r requirements.txt
+      volumeMounts:
+      - name: build-volume
+        mountPath: /clone
+
+  - name: task-test
+    script:
+      image: python:3.9
+      command: ['sh']
+      source: |
+        #!/bin/sh
+        pip install --upgrade pip
+        pip install nose
+        cd /clone/src
+        nosetests
+      volumeMounts:
+      - name: build-volume
+        mountPath: /clone
+
+  - name: task-imagebuild
+    inputs:
+      parameters:
+      - name: commit-sha
+      - name: image
+      - name: dockerfile
+    container:
+      image: gcr.io/kaniko-project/executor:latest
+      command: ["/kaniko/executor"]
+      args:
+      - --dockerfile=/clone/src/{{inputs.parameters.dockerfile}}
+      - --context=/clone/src
+      - --destination={{inputs.parameters.image}}:{{inputs.parameters.commit-sha}}
+      - --force
+      volumeMounts:
+      - name: build-volume
+        mountPath: /clone
+      - name: docker-config
+        mountPath: /kaniko/.docker
+      env:
+      - name: DOCKER_CONFIG
+        value: "/kaniko/.docker"
+

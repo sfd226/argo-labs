@@ -1,0 +1,124 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rollout-bluegreen-active-dep
+  labels:
+    app: rollout-bluegreen
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: rollout-bluegreen
+  template:
+    metadata:
+      labels:
+        app: rollout-bluegreen
+    spec:
+      volumes:
+      - name: nginx-html
+        emptyDir: {}
+      initContainers:
+      - name: init-nginx
+        image: busybox:latest
+        command: ['sh', '-c', 'echo "rollout-bluegreen-active-dep" > /usr/share/nginx/html/index.html']
+        volumeMounts:
+        - name: nginx-html
+          mountPath: /usr/share/nginx/html
+      containers:
+      - name: nginx
+        image: nginx:1.14.2
+        ports:
+        - containerPort: 80
+        volumeMounts:
+        - name: nginx-html
+          mountPath: /usr/share/nginx/html
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rollout-bluegreen-preview-dep
+  labels:
+    app: rollout-bluegreen-preview
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: rollout-bluegreen-preview
+  template:
+    metadata:
+      labels:
+        app: rollout-bluegreen-preview
+    spec:
+      volumes:
+      - name: nginx-html
+        emptyDir: {}
+      initContainers:
+      - name: init-nginx
+        image: busybox:latest
+        command: ['sh', '-c', 'echo "rollout-bluegreen-preview-dep" > /usr/share/nginx/html/index.html']
+        volumeMounts:
+        - name: nginx-html
+          mountPath: /usr/share/nginx/html
+      containers:
+      - name: nginx
+        image: nginx:1.14.2
+        ports:
+        - containerPort: 80
+        volumeMounts:
+        - name: nginx-html
+          mountPath: /usr/share/nginx/html
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rollout-bluegreen-active
+spec:
+  type: NodePort
+  selector:
+    app: rollout-bluegreen
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
+      nodePort: 30001
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rollout-bluegreen-preview
+spec:
+  type: NodePort
+  selector:
+    app: rollout-bluegreen-preview
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
+      nodePort: 30002
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: rollout-bluegreen
+spec:
+  replicas: 2
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      app: rollout-bluegreen
+  template:
+    metadata:
+      labels:
+        app: rollout-bluegreen
+    spec:
+      containers:
+      - name: rollouts-demo
+        image: argoproj/rollouts-demo:blue
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+  strategy:
+    blueGreen:
+      activeService: rollout-bluegreen-active
+      previewService: rollout-bluegreen-preview
+      autoPromotionEnabled: false

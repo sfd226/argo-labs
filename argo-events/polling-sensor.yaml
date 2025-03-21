@@ -1,0 +1,36 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Sensor
+metadata:
+  name: polling-sensor
+  namespace: argo-events
+spec:
+  template:
+    serviceAccountName: operate-workflow-sa
+  dependencies:
+    - name: poll-github
+      eventSourceName: webhook
+      eventName: github
+  triggers:
+    - template:
+        name: launch-vote-ci
+        argoWorkflow:
+          operation: submit
+          source:
+            resource:
+              apiVersion: argoproj.io/v1alpha1
+              kind: Workflow
+              metadata:
+                generateName: ci-pipeline-
+              spec:
+                workflowTemplateRef:
+                  name: vote-ci-template
+                arguments:
+                  parameters:
+                  - name: repo-url
+                    value: "https://github.com/FrederiqueRetsema/argo-labs.git"
+                  - name: branch
+                    value: "main"
+                  - name: image
+                    value: "frederiquer/vote"
+                  - name: dockerfile
+                    value: "Dockerfile"

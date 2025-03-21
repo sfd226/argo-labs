@@ -1,0 +1,25 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: vote
+spec:
+  replicas: 5
+  strategy:
+    blueGreen: null
+    canary:
+      steps:
+      - setWeight: 20
+      - pause: 
+          duration: 10
+      - setWeight: 40
+      - pause: 
+          duration: 10
+      - setWeight: 60
+      - pause: 
+          duration: 10
+      - setWeight: 80
+      - pause: 
+          duration: 10
+      - setWeight: 100
+      - pause: 
+          duration: 10
