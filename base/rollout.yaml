@@ -1,20 +1,21 @@
-apiVersion: apps/v1
-kind: Deployment
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
 metadata:
   labels:
     app: vote
     tier: front
   name: vote
 spec:
-  replicas: 4
+  replicas: 1
   selector:
     matchLabels:
       app: vote
-  strategy: 
-    type: RollingUpdate
-    rollingUpdate:
-      maxUnavailable: 1
-      maxSurge: 2
+  strategy:
+    blueGreen:
+      autoPromotionEnabled: true
+      autoPromotionSeconds: 30
+      activeService: vote
+      previewService: vote-preview
   template:
     metadata:
       labels:
